@@ -11,7 +11,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
 
 # Cấu hình
-MAX_NEWS_PER_RUN = 10  # Tăng từ 3 lên 10 tin mỗi lần
+MAX_NEWS_PER_RUN = 10
 DELAY_BETWEEN_MESSAGES = 2  # Giây giữa các tin
 
 def debug_env():
@@ -51,24 +51,16 @@ def get_rss_data():
             print(f"❌ Lỗi parse XML: {e}")
             return None
             
-        namespaces = {'media': 'http://search.yahoo.com/mrss/'}
-        
         news_items = []
         for item in root.findall('.//item'):
             try:
                 title_elem = item.find('title')
-                desc_elem = item.find('description') 
                 link_elem = item.find('link')
                 pub_date_elem = item.find('pubDate')
                 
                 title = title_elem.text if title_elem is not None else "Không có tiêu đề"
-                description = desc_elem.text if desc_elem is not None else "Không có mô tả"
                 link = link_elem.text if link_elem is not None else "#"
                 pub_date = pub_date_elem.text if pub_date_elem is not None else ""
-                
-                # Làm sạch mô tả
-                clean_description = re.sub('<[^<]+?>', '', description)
-                clean_description = clean_description.strip()
                 
                 # Chuyển đổi pub_date thành datetime object để sắp xếp
                 try:
@@ -77,10 +69,8 @@ def get_rss_data():
                     pub_date_obj = datetime.now()
                 
                 news_items.append({
-                    'title': title, 
-                    'description': clean_description,
+                    'title': title,
                     'link': link, 
-                    'pub_date': pub_date,
                     'pub_date_obj': pub_date_obj
                 })
                 
@@ -145,27 +135,9 @@ def save_sent_links(links):
     except Exception as e:
         print(f"❌ Lỗi lưu sent_links: {e}")
 
-def format_news_message(item):
-    """Định dạng tin nhắn theo yêu cầu mới"""
-    title = item['title']
-    description = item['description']
-    
-    # Loại bỏ trùng lặp: Nếu description bắt đầu bằng title thì bỏ title trong description
-    if description.startswith(title):
-        description = description[len(title):].strip()
-    
-    # Giới hạn độ dài description
-    if len(description) > 250:
-        description = description[:250] + "..."
-    
-    # Format tin nhắn mới: không có ngày tháng, không có số thứ tự
-    message = f"{title}\n\n{description}\n\nĐọc tin đầy đủ trên Coin68: {item['link']}"
-    
-    return message
-
 def main():
     print("=" * 60)
-    print("🤖 Bắt đầu Coin68 Telegram Bot - ENHANCED VERSION")
+    print("🤖 Bắt đầu Coin68 Telegram Bot - SIMPLIFIED VERSION")
     print("=" * 60)
     
     debug_env()
@@ -196,14 +168,14 @@ def main():
     items_to_send = new_items[:MAX_NEWS_PER_RUN]
     print(f"📤 Sẽ gửi {len(items_to_send)} tin")
     
-    # Gửi tin
+    # Gửi tin - CHỈ GỬI LINK
     success_count = 0
     for i, item in enumerate(items_to_send):
         try:
             print(f"\n📨 Đang gửi tin {i+1}/{len(items_to_send)}...")
             
-            # Format tin nhắn mới (không có ngày tháng, không có số thứ tự)
-            message = format_news_message(item)
+            # CHỈ GỬI LINK - Telegram tự động tạo preview
+            message = item['link']
             
             # Gửi tin nhắn
             if send_telegram_message(message):
