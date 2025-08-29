@@ -25,19 +25,42 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests beautifulsoup4
+        pip install requests beautifulsoup4 lxml
 
-    - name: Run Telegram Bot
+    - name: Debug - List files and check script
+      run: |
+        echo "📁 Current directory:"
+        pwd
+        echo "📄 Files:"
+        ls -la
+        echo "🔍 Check Python script syntax:"
+        python -m py_compile coin68_bot.py || echo "❌ Syntax error!"
+        echo "📋 First few lines of script:"
+        head -20 coin68_bot.py
+
+    - name: Run Telegram Bot with debug
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID: ${{ secrets.CHAT_ID }}
         GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
         GIST_ID: ${{ secrets.GIST_ID }}
       run: |
-        if [ -f "coin68_bot.py" ]; then
-            echo "✅ Found coin68_bot.py, running..."
-            python coin68_bot.py
-        else
-            echo "❌ ERROR: coin68_bot.py not found!"
-            exit 1
-        fi
+        echo "🧪 Testing Python script..."
+        # Chạy thử với debug
+        python -c "
+        import sys
+        print('Python path:', sys.path)
+        try:
+            import requests
+            print('✅ requests installed')
+        except ImportError as e:
+            print('❌ requests missing:', e)
+        try:
+            import beautifulsoup4
+            print('✅ beautifulsoup4 installed')
+        except ImportError as e:
+            print('❌ beautifulsoup4 missing:', e)
+        "
+        
+        echo "🚀 Running main script..."
+        python coin68_bot.py
