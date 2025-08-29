@@ -2,18 +2,16 @@ name: Coin68 Telegram Bot
 
 on:
   schedule:
-    # Chạy mỗi 30 phút (UTC time)
     - cron: '*/30 * * * *'
-  workflow_dispatch:  # Cho phép chạy thủ công
+  workflow_dispatch:
 
-# THÊM PERMISSIONS
 permissions:
   contents: read
 
 jobs:
   send-news:
     runs-on: ubuntu-latest
-    timeout-minutes: 5  # Set timeout để tránh chạy quá lâu
+    timeout-minutes: 5
     
     steps:
     - name: Checkout code
@@ -33,25 +31,13 @@ jobs:
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID: ${{ secrets.CHAT_ID }}
+        GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        GIST_ID: ${{ secrets.GIST_ID }}
       run: |
-        # Kiểm tra file tồn tại
         if [ -f "coin68_bot.py" ]; then
             echo "✅ Found coin68_bot.py, running..."
-            echo "🕐 Start time: $(date)"
             python coin68_bot.py
-            echo "🕐 End time: $(date)"
         else
             echo "❌ ERROR: coin68_bot.py not found!"
-            echo "📁 Current files:"
-            ls -la
             exit 1
         fi
-
-    - name: Monitor usage (optional)
-      run: |
-        echo "📊 Ước tính sử dụng GitHub Actions:"
-        echo "   - 48 lần chạy/ngày"
-        echo "   ~ 0.68 phút/lần" 
-        echo "   ≈ 32.64 phút/ngày"
-        echo "   ≈ 979.2 phút/tháng"
-        echo "   ✅ Dưới 1000 phút miễn phí"
