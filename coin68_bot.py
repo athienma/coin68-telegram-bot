@@ -70,16 +70,26 @@ def get_rss_data():
                 clean_description = re.sub('<[^<]+?>', '', description)
                 clean_description = clean_description.strip()
                 
+                # Chuyển đổi pub_date thành datetime object để sắp xếp
+                try:
+                    pub_date_obj = datetime.strptime(pub_date, '%a, %d %b %Y %H:%M:%S %Z')
+                except:
+                    pub_date_obj = datetime.now()
+                
                 news_items.append({
                     'title': title, 
                     'description': clean_description,
                     'link': link, 
-                    'pub_date': pub_date
+                    'pub_date': pub_date,
+                    'pub_date_obj': pub_date_obj
                 })
                 
             except Exception as e:
                 print(f"⚠️ Lỗi xử lý item: {e}")
                 continue
+        
+        # Sắp xếp tin theo thời gian (mới nhất trước)
+        news_items.sort(key=lambda x: x['pub_date_obj'], reverse=True)
         
         print(f"✅ Đã lấy được {len(news_items)} tin")
         return news_items
@@ -135,6 +145,24 @@ def save_sent_links(links):
     except Exception as e:
         print(f"❌ Lỗi lưu sent_links: {e}")
 
+def format_news_message(item):
+    """Định dạng tin nhắn theo yêu cầu mới"""
+    title = item['title']
+    description = item['description']
+    
+    # Loại bỏ trùng lặp: Nếu description bắt đầu bằng title thì bỏ title trong description
+    if description.startswith(title):
+        description = description[len(title):].strip()
+    
+    # Giới hạn độ dài description
+    if len(description) > 250:
+        description = description[:250] + "..."
+    
+    # Format tin nhắn mới: không có ngày tháng, không có số thứ tự
+    message = f"{title}\n\n{description}\n\nĐọc tin đầy đủ trên Coin68: {item['link']}"
+    
+    return message
+
 def main():
     print("=" * 60)
     print("🤖 Bắt đầu Coin68 Telegram Bot - ENHANCED VERSION")
@@ -174,23 +202,8 @@ def main():
         try:
             print(f"\n📨 Đang gửi tin {i+1}/{len(items_to_send)}...")
             
-            # Format tin nhắn đẹp
-            description = item['description']
-            if len(description) > 200:
-                description = description[:200] + "..."
-            
-            # Tin nhắn với format đẹp
-            message = f"""
-🚀 <b>{item['title']}</b>
-
-📝 {description}
-
-📅 {item['pub_date'][:16] if item['pub_date'] else 'N/A'}
-
-📖 <a href="{item['link']}">Đọc tin đầy đủ trên Coin68</a>
-
-#{i+1}/{len(items_to_send)}
-            """.strip()
+            # Format tin nhắn mới (không có ngày tháng, không có số thứ tự)
+            message = format_news_message(item)
             
             # Gửi tin nhắn
             if send_telegram_message(message):
