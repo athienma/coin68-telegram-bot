@@ -51,6 +51,8 @@ def get_rss_data():
             print(f"❌ Lỗi parse XML: {e}")
             return None
             
+        namespaces = {'media': 'http://search.yahoo.com/mrss/'}
+        
         news_items = []
         for item in root.findall('.//item'):
             try:
@@ -63,6 +65,12 @@ def get_rss_data():
                 description = desc_elem.text if desc_elem is not None else "Không có mô tả"
                 link = link_elem.text if link_elem is not None else "#"
                 pub_date = pub_date_elem.text if pub_date_elem is not None else ""
+                
+                # Lấy ảnh từ media:content
+                image_url = None
+                media_content = item.find('media:content', namespaces)
+                if media_content is not None and 'url' in media_content.attrib:
+                    image_url = media_content.attrib['url']
                 
                 # Làm sạch mô tả
                 clean_description = re.sub('<[^<]+?>', '', description)
@@ -78,6 +86,7 @@ def get_rss_data():
                     'title': title, 
                     'description': clean_description,
                     'link': link, 
+                    'image_url': image_url,
                     'pub_date_obj': pub_date_obj
                 })
                 
@@ -100,6 +109,28 @@ def get_rss_data():
         traceback.print_exc()
         return None
 
+def send_telegram_photo(photo_url, caption):
+    try:
+        if not BOT_TOKEN or not CHAT_ID:
+            return False
+            
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+        data = {
+            "chat_id": CHAT_ID,
+            "photo": photo_url,
+            "caption": caption,
+            "parse_mode": "HTML"
+        }
+        
+        response = requests.post(url, data=data, timeout=15)
+        result = response.json()
+        
+        return result.get('ok', False)
+            
+    except Exception as e:
+        print(f"❌ Lỗi gửi ảnh: {e}")
+        return False
+
 def send_telegram_message(message):
     try:
         if not BOT_TOKEN or not CHAT_ID:
@@ -110,7 +141,7 @@ def send_telegram_message(message):
             "chat_id": CHAT_ID,
             "text": message,
             "parse_mode": "HTML",
-            "disable_web_page_preview": True  # Tắt preview để tự control format
+            "disable_web_page_preview": False
         }
         
         response = requests.post(url, data=data, timeout=10)
@@ -142,8 +173,8 @@ def save_sent_links(links):
     except Exception as e:
         print(f"❌ Lỗi lưu sent_links: {e}")
 
-def format_news_message(item):
-    """Định dạng tin nhắn với link ở dưới cùng"""
+def format_caption(item):
+    """Định dạng caption với link ở dưới cùng"""
     title = item['title']
     description = item['description']
     
@@ -151,18 +182,18 @@ def format_news_message(item):
     if description.startswith(title):
         description = description[len(title):].strip()
     
-    # Giới hạn độ dài description
-    if len(description) > 200:
-        description = description[:200] + "..."
+    # Giới hạn độ dài description (caption có giới hạn 1024 ký tự)
+    if len(description) > 800:
+        description = description[:800] + "..."
     
-    # Format tin nhắn: tiêu đề + mô tả + link ở dưới cùng
-    message = f"{title}\n\n{description}\n\n➡️ Đọc tiếp: {item['link']}"
+    # Format caption: tiêu đề + mô tả + link ở dưới cùng
+    caption = f"{title}\n\n{description}\n\n➡️ Đọc tiếp: {item['link']}"
     
-    return message
+    return caption
 
 def main():
     print("=" * 60)
-    print("🤖 Bắt đầu Coin68 Telegram Bot - LINK AT BOTTOM VERSION")
+    print("🤖 Bắt đầu Coin68 Telegram Bot - PHOTO WITH CAPTION VERSION")
     print("=" * 60)
     
     debug_env()
@@ -199,16 +230,32 @@ def main():
         try:
             print(f"\n📨 Đang gửi tin {i+1}/{len(items_to_send)}...")
             
-            # Format tin nhắn với link ở dưới cùng
-            message = format_news_message(item)
+            # Format caption với link ở dưới cùng
+            caption = format_caption(item)
             
-            # Gửi tin nhắn
-            if send_telegram_message(message):
-                sent_links.append(item['link'])
-                success_count += 1
-                print(f"✅ Tin {i+1} gửi thành công")
+            # Gửi ảnh kèm caption nếu có ảnh
+            if item['image_url']:
+                if send_telegram_photo(item['image_url'], caption):
+                    sent_links.append(item['link'])
+                    success_count += 1
+                    print(f"✅ Tin {i+1} gửi thành công với ảnh")
+                else:
+                    # Fallback: gửi dạng text nếu gửi ảnh thất bại
+                    print("🔄 Gửi ảnh thất bại, thử gửi dạng text...")
+                    if send_telegram_message(caption):
+                        sent_links.append(item['link'])
+                        success_count += 1
+                        print(f"✅ Tin {i+1} gửi thành công dạng text")
+                    else:
+                        print(f"❌ Tin {i+1} gửi thất bại")
             else:
-                print(f"❌ Tin {i+1} gửi thất bại")
+                # Gửi dạng text nếu không có ảnh
+                if send_telegram_message(caption):
+                    sent_links.append(item['link'])
+                    success_count += 1
+                    print(f"✅ Tin {i+1} gửi thành công dạng text")
+                else:
+                    print(f"❌ Tin {i+1} gửi thất bại")
             
             # Chờ giữa các tin
             if i < len(items_to_send) - 1:
