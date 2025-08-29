@@ -8,6 +8,10 @@ on:
     - cron: '0 13 * * *' # 8:00 PM Vietnam time
   workflow_dispatch:  # Cho phép chạy thủ công
 
+# THÊM PERMISSIONS
+permissions:
+  contents: read
+
 jobs:
   send-news:
     runs-on: ubuntu-latest
@@ -26,9 +30,27 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests
 
+    - name: List files (DEBUG)
+      run: |
+        echo "📁 Current directory:"
+        pwd
+        echo "📄 Files in repository:"
+        ls -la
+        echo "📄 Files in root:"
+        ls -la *.py || echo "No Python files found"
+
     - name: Run Telegram Bot
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHAT_ID: ${{ secrets.CHAT_ID }}
       run: |
-        python coin68_bot.py
+        # Kiểm tra file tồn tại
+        if [ -f "coin68_bot.py" ]; then
+            echo "✅ Found coin68_bot.py, running..."
+            python coin68_bot.py
+        else
+            echo "❌ ERROR: coin68_bot.py not found!"
+            echo "📁 Current files:"
+            ls -la
+            exit 1
+        fi
