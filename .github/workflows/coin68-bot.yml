@@ -2,10 +2,8 @@ name: Coin68 Telegram Bot
 
 on:
   schedule:
-    - cron: '0 1 * * *'  # 8:00 AM Vietnam time (UTC+7)
-    - cron: '0 5 * * *'  # 12:00 PM Vietnam time  
-    - cron: '0 10 * * *' # 5:00 PM Vietnam time
-    - cron: '0 13 * * *' # 8:00 PM Vietnam time
+    # Chạy mỗi 30 phút (UTC time)
+    - cron: '*/30 * * * *'
   workflow_dispatch:  # Cho phép chạy thủ công
 
 # THÊM PERMISSIONS
@@ -15,6 +13,7 @@ permissions:
 jobs:
   send-news:
     runs-on: ubuntu-latest
+    timeout-minutes: 5  # Set timeout để tránh chạy quá lâu
     
     steps:
     - name: Checkout code
@@ -28,16 +27,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests
-
-    - name: List files (DEBUG)
-      run: |
-        echo "📁 Current directory:"
-        pwd
-        echo "📄 Files in repository:"
-        ls -la
-        echo "📄 Files in root:"
-        ls -la *.py || echo "No Python files found"
+        pip install requests beautifulsoup4
 
     - name: Run Telegram Bot
       env:
@@ -47,10 +37,21 @@ jobs:
         # Kiểm tra file tồn tại
         if [ -f "coin68_bot.py" ]; then
             echo "✅ Found coin68_bot.py, running..."
+            echo "🕐 Start time: $(date)"
             python coin68_bot.py
+            echo "🕐 End time: $(date)"
         else
             echo "❌ ERROR: coin68_bot.py not found!"
             echo "📁 Current files:"
             ls -la
             exit 1
         fi
+
+    - name: Monitor usage (optional)
+      run: |
+        echo "📊 Ước tính sử dụng GitHub Actions:"
+        echo "   - 48 lần chạy/ngày"
+        echo "   ~ 0.68 phút/lần" 
+        echo "   ≈ 32.64 phút/ngày"
+        echo "   ≈ 979.2 phút/tháng"
+        echo "   ✅ Dưới 1000 phút miễn phí"
