@@ -10,12 +10,17 @@ from datetime import datetime
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
 
+# Cấu hình
+MAX_NEWS_PER_RUN = 10  # Tăng từ 3 lên 10 tin mỗi lần
+DELAY_BETWEEN_MESSAGES = 2  # Giây giữa các tin
+
 def debug_env():
     """Debug environment variables"""
     print("🔍 DEBUG ENVIRONMENT VARIABLES:")
     print(f"BOT_TOKEN: {'SET' if BOT_TOKEN else 'MISSING'}")
     print(f"CHAT_ID: {'SET' if CHAT_ID else 'MISSING'}")
     print(f"Python Version: {sys.version}")
+    print(f"Max news per run: {MAX_NEWS_PER_RUN}")
     print("-" * 50)
 
 def get_rss_data():
@@ -33,11 +38,9 @@ def get_rss_data():
         )
         
         print(f"✅ Status Code: {response.status_code}")
-        print(f"✅ Content-Type: {response.headers.get('content-type', 'unknown')}")
         
         if response.status_code != 200:
             print(f"❌ Lỗi HTTP: {response.status_code}")
-            print(f"❌ Response: {response.text[:200]}...")
             return None
             
         # Parse XML
@@ -56,16 +59,12 @@ def get_rss_data():
                 title_elem = item.find('title')
                 desc_elem = item.find('description') 
                 link_elem = item.find('link')
+                pub_date_elem = item.find('pubDate')
                 
                 title = title_elem.text if title_elem is not None else "Không có tiêu đề"
                 description = desc_elem.text if desc_elem is not None else "Không có mô tả"
                 link = link_elem.text if link_elem is not None else "#"
-                
-                # Lấy ảnh từ media content
-                image_url = None
-                media_content = item.find('media:content', namespaces)
-                if media_content is not None:
-                    image_url = media_content.get('url')
+                pub_date = pub_date_elem.text if pub_date_elem is not None else ""
                 
                 # Làm sạch mô tả
                 clean_description = re.sub('<[^<]+?>', '', description)
@@ -75,7 +74,7 @@ def get_rss_data():
                     'title': title, 
                     'description': clean_description,
                     'link': link, 
-                    'image_url': image_url
+                    'pub_date': pub_date
                 })
                 
             except Exception as e:
@@ -94,21 +93,11 @@ def get_rss_data():
         traceback.print_exc()
         return None
 
-def send_telegram_message(message, image_url=None):
+def send_telegram_message(message):
     try:
-        if not BOT_TOKEN:
-            print("❌ Thiếu BOT_TOKEN")
-            return False
-        if not CHAT_ID:
-            print("❌ Thiếu CHAT_ID") 
+        if not BOT_TOKEN or not CHAT_ID:
             return False
             
-        print(f"📤 Đang gửi tin nhắn Telegram...")
-        
-        # KHÔNG gửi ảnh từ Coin68 (vì lỗi IMAGE_PROCESS_FAILED)
-        # Luôn gửi dạng text-only để tránh lỗi
-        image_url = None
-        
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         data = {
             "chat_id": CHAT_ID,
@@ -117,36 +106,49 @@ def send_telegram_message(message, image_url=None):
             "disable_web_page_preview": False
         }
         
-        print("📝 Gửi tin nhắn text (không ảnh)...")
-        response = requests.post(url, data=data)
-        
+        response = requests.post(url, data=data, timeout=10)
         result = response.json()
-        if result.get('ok'):
-            print("✅ Gửi Telegram thành công")
-            return True
-        else:
-            error_msg = result.get('description', 'Unknown error')
-            print(f"❌ Lỗi Telegram: {error_msg}")
-            return False
+        
+        return result.get('ok', False)
             
     except Exception as e:
         print(f"❌ Lỗi gửi tin nhắn: {e}")
-        import traceback
-        traceback.print_exc()
         return False
+
+def load_sent_links():
+    """Tải danh sách các link đã gửi"""
+    try:
+        with open('sent_links.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def save_sent_links(links):
+    """Lưu danh sách các link đã gửi"""
+    try:
+        # Giữ chỉ 500 link gần nhất
+        if len(links) > 500:
+            links = links[-500:]
+        
+        with open('sent_links.json', 'w', encoding='utf-8') as f:
+            json.dump(links, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"❌ Lỗi lưu sent_links: {e}")
 
 def main():
     print("=" * 60)
-    print("🤖 Bắt đầu Coin68 Telegram Bot - TEXT ONLY VERSION")
+    print("🤖 Bắt đầu Coin68 Telegram Bot - ENHANCED VERSION")
     print("=" * 60)
     
-    # Debug environment
     debug_env()
     
     if not BOT_TOKEN or not CHAT_ID:
         print("❌ ERROR: Thiếu BOT_TOKEN hoặc CHAT_ID")
-        print("💡 Vui lòng kiểm tra Secrets trong GitHub Settings")
         sys.exit(1)
+    
+    # Tải danh sách đã gửi
+    sent_links = load_sent_links()
+    print(f"📋 Số tin đã gửi trước đây: {len(sent_links)}")
     
     # Lấy dữ liệu RSS
     news_items = get_rss_data()
@@ -154,41 +156,64 @@ def main():
         print("❌ Không có dữ liệu RSS")
         sys.exit(1)
     
-    print(f"📊 Tổng số tin nhận được: {len(news_items)}")
+    # Lọc tin chưa gửi
+    new_items = [item for item in news_items if item['link'] not in sent_links]
+    print(f"📨 Số tin mới: {len(new_items)}")
     
-    # Chỉ gửi 3 tin đầu
+    if not new_items:
+        print("✅ Không có tin mới")
+        sys.exit(0)
+    
+    # Giới hạn số tin gửi mỗi lần
+    items_to_send = new_items[:MAX_NEWS_PER_RUN]
+    print(f"📤 Sẽ gửi {len(items_to_send)} tin")
+    
+    # Gửi tin
     success_count = 0
-    for i, item in enumerate(news_items[:3]):
+    for i, item in enumerate(items_to_send):
         try:
-            print(f"\n📨 Đang xử lý tin {i+1}: {item['title'][:50]}...")
+            print(f"\n📨 Đang gửi tin {i+1}/{len(items_to_send)}...")
             
-            # Format tin nhắn
+            # Format tin nhắn đẹp
             description = item['description']
-            if len(description) > 250:
-                description = description[:250] + "..."
+            if len(description) > 200:
+                description = description[:200] + "..."
             
-            # Tạo tin nhắn đẹp hơn
-            message = f"🚀 <b>{item['title']}</b>\n\n{description}\n\n📖 <a href='{item['link']}'>Đọc tin đầy đủ trên Coin68</a>"
+            # Tin nhắn với format đẹp
+            message = f"""
+🚀 <b>{item['title']}</b>
+
+📝 {description}
+
+📅 {item['pub_date'][:16] if item['pub_date'] else 'N/A'}
+
+📖 <a href="{item['link']}">Đọc tin đầy đủ trên Coin68</a>
+
+#{i+1}/{len(items_to_send)}
+            """.strip()
             
-            # Gửi tin nhắn (KHÔNG có ảnh)
+            # Gửi tin nhắn
             if send_telegram_message(message):
+                sent_links.append(item['link'])
                 success_count += 1
                 print(f"✅ Tin {i+1} gửi thành công")
             else:
                 print(f"❌ Tin {i+1} gửi thất bại")
             
-            # Chờ 2 giây giữa các tin
-            if i < 2:
+            # Chờ giữa các tin
+            if i < len(items_to_send) - 1:
                 import time
-                time.sleep(2)
+                time.sleep(DELAY_BETWEEN_MESSAGES)
                 
         except Exception as e:
-            print(f"❌ Lỗi khi xử lý tin {i+1}: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Lỗi khi gửi tin {i+1}: {e}")
+    
+    # Lưu danh sách đã gửi
+    save_sent_links(sent_links)
     
     print("\n" + "=" * 60)
-    print(f"🎉 Kết thúc! Đã gửi {success_count}/3 tin thành công")
+    print(f"🎉 HOÀN THÀNH! Đã gửi {success_count}/{len(items_to_send)} tin mới")
+    print(f"💾 Tổng số tin đã gửi: {len(sent_links)}")
     print("=" * 60)
     
     if success_count == 0:
