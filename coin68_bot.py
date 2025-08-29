@@ -137,7 +137,7 @@ def save_sent_links(links):
 
 def main():
     print("=" * 60)
-    print("🤖 Bắt đầu Coin68 Telegram Bot - SIMPLIFIED VERSION")
+    print("🤖 Bắt đầu Coin68 Telegram Bot - ULTRA SIMPLE VERSION")
     print("=" * 60)
     
     debug_env()
@@ -168,13 +168,14 @@ def main():
     items_to_send = new_items[:MAX_NEWS_PER_RUN]
     print(f"📤 Sẽ gửi {len(items_to_send)} tin")
     
-    # Gửi tin - CHỈ GỬI LINK
+    # Gửi tin - CHỈ GỬI LINK (Telegram tự động tạo preview với ảnh)
     success_count = 0
     for i, item in enumerate(items_to_send):
         try:
             print(f"\n📨 Đang gửi tin {i+1}/{len(items_to_send)}...")
             
-            # CHỈ GỬI LINK - Telegram tự động tạo preview
+            # CHỈ GỬI LINK - Telegram tự động tạo preview với ảnh
+            # Người dùng bấm vào ảnh sẽ vào link
             message = item['link']
             
             # Gửi tin nhắn
