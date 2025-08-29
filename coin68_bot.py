@@ -65,12 +65,17 @@ def get_rss_data():
                 description = desc_elem.text if desc_elem is not None else "Không có mô tả"
                 link = link_elem.text if link_elem is not None else "#"
                 pub_date = pub_date_elem.text if pub_date_elem is not None else ""
-                
+
                 # Lấy ảnh từ media:content
                 image_url = None
                 media_content = item.find('media:content', namespaces)
                 if media_content is not None and 'url' in media_content.attrib:
                     image_url = media_content.attrib['url']
+                else:
+                    # Thử tìm ảnh trong description
+                    img_match = re.search(r'<img[^>]+src="([^">]+)"', description)
+                    if img_match:
+                        image_url = img_match.group(1)
                 
                 # Làm sạch mô tả
                 clean_description = re.sub('<[^<]+?>', '', description)
@@ -93,9 +98,6 @@ def get_rss_data():
             except Exception as e:
                 print(f"⚠️ Lỗi xử lý item: {e}")
                 continue
-        
-        # Sắp xếp tin theo thời gian (mới nhất trước)
-        news_items.sort(key=lambda x: x['pub_date_obj'], reverse=True)
         
         print(f"✅ Đã lấy được {len(news_items)} tin")
         return news_items
@@ -193,7 +195,7 @@ def format_caption(item):
 
 def main():
     print("=" * 60)
-    print("🤖 Bắt đầu Coin68 Telegram Bot - PHOTO WITH CAPTION VERSION")
+    print("🤖 Bắt đầu Coin68 Telegram Bot - CHRONOLOGICAL ORDER")
     print("=" * 60)
     
     debug_env()
@@ -220,15 +222,21 @@ def main():
         print("✅ Không có tin mới")
         sys.exit(0)
     
+    # SẮP XẾP THEO THỜI GIAN: CŨ NHẤT ĐẦU TIÊN, MỚI NHẤT CUỐI CÙNG
+    # Để tin mới nhất được gửi cuối cùng và nằm ở dưới cùng trong Telegram
+    new_items.sort(key=lambda x: x['pub_date_obj'])
+    
     # Giới hạn số tin gửi mỗi lần
     items_to_send = new_items[:MAX_NEWS_PER_RUN]
     print(f"📤 Sẽ gửi {len(items_to_send)} tin")
+    print("📅 Thứ tự gửi: Cũ → Mới (tin mới nhất sẽ ở dưới cùng Telegram)")
     
     # Gửi tin
     success_count = 0
     for i, item in enumerate(items_to_send):
         try:
             print(f"\n📨 Đang gửi tin {i+1}/{len(items_to_send)}...")
+            print(f"📅 Thời gian: {item['pub_date_obj']}")
             
             # Format caption với link ở dưới cùng
             caption = format_caption(item)
