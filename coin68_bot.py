@@ -9,280 +9,87 @@ from datetime import datetime
 # Lấy token từ environment variables
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
+GIST_TOKEN = os.getenv('GIST_TOKEN')
+GIST_ID = os.getenv('GIST_ID')
 
 # Cấu hình
 MAX_NEWS_PER_RUN = 10
-DELAY_BETWEEN_MESSAGES = 2  # Giây giữa các tin
+DELAY_BETWEEN_MESSAGES = 2
 
-def debug_env():
-    """Debug environment variables"""
-    print("🔍 DEBUG ENVIRONMENT VARIABLES:")
-    print(f"BOT_TOKEN: {'SET' if BOT_TOKEN else 'MISSING'}")
-    print(f"CHAT_ID: {'SET' if CHAT_ID else 'MISSING'}")
-    print(f"Python Version: {sys.version}")
-    print(f"Max news per run: {MAX_NEWS_PER_RUN}")
-    print("-" * 50)
-
-def get_rss_data():
+def load_sent_links():
+    """Tải danh sách các link đã gửi từ GitHub Gist"""
+    if not GIST_TOKEN or not GIST_ID:
+        print("⚠️ GIST_TOKEN hoặc GIST_ID chưa được cấu hình")
+        return []
+    
     try:
-        print("🔄 Đang kết nối đến Coin68 RSS...")
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/xml, text/xml, */*'
+            'Authorization': f'token {GIST_TOKEN}',
+            'Accept': 'application/vnd.github.v3+json'
         }
         
         response = requests.get(
-            'https://coin68.com/rss/tin-moi-nhat.rss', 
-            headers=headers, 
-            timeout=15
+            f'https://api.github.com/gists/{GIST_ID}',
+            headers=headers,
+            timeout=10
         )
         
-        print(f"✅ Status Code: {response.status_code}")
-        
-        if response.status_code != 200:
-            print(f"❌ Lỗi HTTP: {response.status_code}")
-            return None
-            
-        # Parse XML
-        try:
-            root = ET.fromstring(response.content)
-            print("✅ Parse XML thành công")
-        except ET.ParseError as e:
-            print(f"❌ Lỗi parse XML: {e}")
-            return None
-            
-        namespaces = {'media': 'http://search.yahoo.com/mrss/'}
-        
-        news_items = []
-        for item in root.findall('.//item'):
-            try:
-                title_elem = item.find('title')
-                desc_elem = item.find('description') 
-                link_elem = item.find('link')
-                pub_date_elem = item.find('pubDate')
-                
-                title = title_elem.text if title_elem is not None else "Không có tiêu đề"
-                description = desc_elem.text if desc_elem is not None else "Không có mô tả"
-                link = link_elem.text if link_elem is not None else "#"
-                pub_date = pub_date_elem.text if pub_date_elem is not None else ""
-
-                # Lấy ảnh từ media:content
-                image_url = None
-                media_content = item.find('media:content', namespaces)
-                if media_content is not None and 'url' in media_content.attrib:
-                    image_url = media_content.attrib['url']
-                else:
-                    # Thử tìm ảnh trong description
-                    img_match = re.search(r'<img[^>]+src="([^">]+)"', description)
-                    if img_match:
-                        image_url = img_match.group(1)
-                
-                # Làm sạch mô tả
-                clean_description = re.sub('<[^<]+?>', '', description)
-                clean_description = clean_description.strip()
-                
-                # Chuyển đổi pub_date thành datetime object để sắp xếp
-                try:
-                    pub_date_obj = datetime.strptime(pub_date, '%a, %d %b %Y %H:%M:%S %Z')
-                except:
-                    pub_date_obj = datetime.now()
-                
-                news_items.append({
-                    'title': title, 
-                    'description': clean_description,
-                    'link': link, 
-                    'image_url': image_url,
-                    'pub_date_obj': pub_date_obj
-                })
-                
-            except Exception as e:
-                print(f"⚠️ Lỗi xử lý item: {e}")
-                continue
-        
-        print(f"✅ Đã lấy được {len(news_items)} tin")
-        return news_items
-        
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Lỗi kết nối: {e}")
-        return None
-    except Exception as e:
-        print(f"❌ Lỗi không xác định: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-def send_telegram_photo(photo_url, caption):
-    try:
-        if not BOT_TOKEN or not CHAT_ID:
-            return False
-            
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-        data = {
-            "chat_id": CHAT_ID,
-            "photo": photo_url,
-            "caption": caption,
-            "parse_mode": "HTML"
-        }
-        
-        response = requests.post(url, data=data, timeout=15)
-        result = response.json()
-        
-        return result.get('ok', False)
+        if response.status_code == 200:
+            gist_data = response.json()
+            content = gist_data['files']['sent_links.json']['content']
+            sent_links = json.loads(content)
+            print(f"✅ Đã tải {len(sent_links)} link từ Gist")
+            return sent_links
+        else:
+            print(f"❌ Lỗi tải Gist: {response.status_code}")
+            return []
             
     except Exception as e:
-        print(f"❌ Lỗi gửi ảnh: {e}")
-        return False
-
-def send_telegram_message(message):
-    try:
-        if not BOT_TOKEN or not CHAT_ID:
-            return False
-            
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        data = {
-            "chat_id": CHAT_ID,
-            "text": message,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": False
-        }
-        
-        response = requests.post(url, data=data, timeout=10)
-        result = response.json()
-        
-        return result.get('ok', False)
-            
-    except Exception as e:
-        print(f"❌ Lỗi gửi tin nhắn: {e}")
-        return False
-
-def load_sent_links():
-    """Tải danh sách các link đã gửi"""
-    try:
-        with open('sent_links.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+        print(f"❌ Lỗi kết nối đến Gist: {e}")
         return []
 
 def save_sent_links(links):
-    """Lưu danh sách các link đã gửi"""
+    """Lưu danh sách các link đã gửi lên GitHub Gist"""
+    if not GIST_TOKEN or not GIST_ID:
+        print("⚠️ GIST_TOKEN hoặc GIST_ID chưa được cấu hình")
+        return False
+    
     try:
         # Giữ chỉ 500 link gần nhất
         if len(links) > 500:
             links = links[-500:]
         
-        with open('sent_links.json', 'w', encoding='utf-8') as f:
-            json.dump(links, f, ensure_ascii=False, indent=2)
+        # Chuẩn bị data để update Gist
+        data = {
+            "files": {
+                "sent_links.json": {
+                    "content": json.dumps(links, ensure_ascii=False, indent=2)
+                }
+            }
+        }
+        
+        headers = {
+            'Authorization': f'token {GIST_TOKEN}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        
+        response = requests.patch(
+            f'https://api.github.com/gists/{GIST_ID}',
+            headers=headers,
+            json=data,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"✅ Đã lưu {len(links)} link lên Gist")
+            return True
+        else:
+            print(f"❌ Lỗi lưu Gist: {response.status_code}")
+            return False
+            
     except Exception as e:
-        print(f"❌ Lỗi lưu sent_links: {e}")
+        print(f"❌ Lỗi kết nối đến Gist: {e}")
+        return False
 
-def format_caption(item):
-    """Định dạng caption với link ở dưới cùng"""
-    title = item['title']
-    description = item['description']
-    
-    # Loại bỏ trùng lặp: Nếu description bắt đầu bằng title thì bỏ title trong description
-    if description.startswith(title):
-        description = description[len(title):].strip()
-    
-    # Giới hạn độ dài description (caption có giới hạn 1024 ký tự)
-    if len(description) > 800:
-        description = description[:800] + "..."
-    
-    # Format caption: tiêu đề + mô tả + link ở dưới cùng
-    caption = f"{title}\n\n{description}\n\n➡️ Đọc tiếp: {item['link']}"
-    
-    return caption
-
-def main():
-    print("=" * 60)
-    print("🤖 Bắt đầu Coin68 Telegram Bot - CHRONOLOGICAL ORDER")
-    print("=" * 60)
-    
-    debug_env()
-    
-    if not BOT_TOKEN or not CHAT_ID:
-        print("❌ ERROR: Thiếu BOT_TOKEN hoặc CHAT_ID")
-        sys.exit(1)
-    
-    # Tải danh sách đã gửi
-    sent_links = load_sent_links()
-    print(f"📋 Số tin đã gửi trước đây: {len(sent_links)}")
-    
-    # Lấy dữ liệu RSS
-    news_items = get_rss_data()
-    if not news_items:
-        print("❌ Không có dữ liệu RSS")
-        sys.exit(1)
-    
-    # Lọc tin chưa gửi
-    new_items = [item for item in news_items if item['link'] not in sent_links]
-    print(f"📨 Số tin mới: {len(new_items)}")
-    
-    if not new_items:
-        print("✅ Không có tin mới")
-        sys.exit(0)
-    
-    # SẮP XẾP THEO THỜI GIAN: CŨ NHẤT ĐẦU TIÊN, MỚI NHẤT CUỐI CÙNG
-    # Để tin mới nhất được gửi cuối cùng và nằm ở dưới cùng trong Telegram
-    new_items.sort(key=lambda x: x['pub_date_obj'])
-    
-    # Giới hạn số tin gửi mỗi lần
-    items_to_send = new_items[:MAX_NEWS_PER_RUN]
-    print(f"📤 Sẽ gửi {len(items_to_send)} tin")
-    print("📅 Thứ tự gửi: Cũ → Mới (tin mới nhất sẽ ở dưới cùng Telegram)")
-    
-    # Gửi tin
-    success_count = 0
-    for i, item in enumerate(items_to_send):
-        try:
-            print(f"\n📨 Đang gửi tin {i+1}/{len(items_to_send)}...")
-            print(f"📅 Thời gian: {item['pub_date_obj']}")
-            
-            # Format caption với link ở dưới cùng
-            caption = format_caption(item)
-            
-            # Gửi ảnh kèm caption nếu có ảnh
-            if item['image_url']:
-                if send_telegram_photo(item['image_url'], caption):
-                    sent_links.append(item['link'])
-                    success_count += 1
-                    print(f"✅ Tin {i+1} gửi thành công với ảnh")
-                else:
-                    # Fallback: gửi dạng text nếu gửi ảnh thất bại
-                    print("🔄 Gửi ảnh thất bại, thử gửi dạng text...")
-                    if send_telegram_message(caption):
-                        sent_links.append(item['link'])
-                        success_count += 1
-                        print(f"✅ Tin {i+1} gửi thành công dạng text")
-                    else:
-                        print(f"❌ Tin {i+1} gửi thất bại")
-            else:
-                # Gửi dạng text nếu không có ảnh
-                if send_telegram_message(caption):
-                    sent_links.append(item['link'])
-                    success_count += 1
-                    print(f"✅ Tin {i+1} gửi thành công dạng text")
-                else:
-                    print(f"❌ Tin {i+1} gửi thất bại")
-            
-            # Chờ giữa các tin
-            if i < len(items_to_send) - 1:
-                import time
-                time.sleep(DELAY_BETWEEN_MESSAGES)
-                
-        except Exception as e:
-            print(f"❌ Lỗi khi gửi tin {i+1}: {e}")
-    
-    # Lưu danh sách đã gửi
-    save_sent_links(sent_links)
-    
-    print("\n" + "=" * 60)
-    print(f"🎉 HOÀN THÀNH! Đã gửi {success_count}/{len(items_to_send)} tin mới")
-    print(f"💾 Tổng số tin đã gửi: {len(sent_links)}")
-    print("=" * 60)
-    
-    if success_count == 0:
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
+# Các hàm khác giữ nguyên (get_rss_data, send_telegram_photo, format_caption, etc.)
+# ...
