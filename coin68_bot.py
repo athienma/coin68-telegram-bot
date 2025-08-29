@@ -20,9 +20,12 @@ def load_sent_links():
     """Tải danh sách các link đã gửi từ GitHub Gist"""
     if not GIST_TOKEN or not GIST_ID:
         print("⚠️ GIST_TOKEN hoặc GIST_ID chưa được cấu hình")
+        print(f"GIST_TOKEN: {'SET' if GIST_TOKEN else 'MISSING'}")
+        print(f"GIST_ID: {'SET' if GIST_ID else 'MISSING'}")
         return []
     
     try:
+        print(f"🔗 Đang kết nối đến Gist: {GIST_ID}")
         headers = {
             'Authorization': f'token {GIST_TOKEN}',
             'Accept': 'application/vnd.github.v3+json'
@@ -34,6 +37,8 @@ def load_sent_links():
             timeout=10
         )
         
+        print(f"📡 Gist response status: {response.status_code}")
+        
         if response.status_code == 200:
             gist_data = response.json()
             content = gist_data['files']['sent_links.json']['content']
@@ -42,54 +47,13 @@ def load_sent_links():
             return sent_links
         else:
             print(f"❌ Lỗi tải Gist: {response.status_code}")
+            print(f"❌ Response: {response.text}")
             return []
             
     except Exception as e:
         print(f"❌ Lỗi kết nối đến Gist: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
-def save_sent_links(links):
-    """Lưu danh sách các link đã gửi lên GitHub Gist"""
-    if not GIST_TOKEN or not GIST_ID:
-        print("⚠️ GIST_TOKEN hoặc GIST_ID chưa được cấu hình")
-        return False
-    
-    try:
-        # Giữ chỉ 500 link gần nhất
-        if len(links) > 500:
-            links = links[-500:]
-        
-        # Chuẩn bị data để update Gist
-        data = {
-            "files": {
-                "sent_links.json": {
-                    "content": json.dumps(links, ensure_ascii=False, indent=2)
-                }
-            }
-        }
-        
-        headers = {
-            'Authorization': f'token {GIST_TOKEN}',
-            'Accept': 'application/vnd.github.v3+json'
-        }
-        
-        response = requests.patch(
-            f'https://api.github.com/gists/{GIST_ID}',
-            headers=headers,
-            json=data,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            print(f"✅ Đã lưu {len(links)} link lên Gist")
-            return True
-        else:
-            print(f"❌ Lỗi lưu Gist: {response.status_code}")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Lỗi kết nối đến Gist: {e}")
-        return False
-
-# Các hàm khác giữ nguyên (get_rss_data, send_telegram_photo, format_caption, etc.)
-# ...
+# ... (các hàm khác giữ nguyên)
