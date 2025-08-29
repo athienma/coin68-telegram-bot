@@ -55,12 +55,18 @@ def get_rss_data():
         for item in root.findall('.//item'):
             try:
                 title_elem = item.find('title')
+                desc_elem = item.find('description') 
                 link_elem = item.find('link')
                 pub_date_elem = item.find('pubDate')
                 
                 title = title_elem.text if title_elem is not None else "Không có tiêu đề"
+                description = desc_elem.text if desc_elem is not None else "Không có mô tả"
                 link = link_elem.text if link_elem is not None else "#"
                 pub_date = pub_date_elem.text if pub_date_elem is not None else ""
+                
+                # Làm sạch mô tả
+                clean_description = re.sub('<[^<]+?>', '', description)
+                clean_description = clean_description.strip()
                 
                 # Chuyển đổi pub_date thành datetime object để sắp xếp
                 try:
@@ -69,7 +75,8 @@ def get_rss_data():
                     pub_date_obj = datetime.now()
                 
                 news_items.append({
-                    'title': title,
+                    'title': title, 
+                    'description': clean_description,
                     'link': link, 
                     'pub_date_obj': pub_date_obj
                 })
@@ -103,7 +110,7 @@ def send_telegram_message(message):
             "chat_id": CHAT_ID,
             "text": message,
             "parse_mode": "HTML",
-            "disable_web_page_preview": False
+            "disable_web_page_preview": True  # Tắt preview để tự control format
         }
         
         response = requests.post(url, data=data, timeout=10)
@@ -135,9 +142,27 @@ def save_sent_links(links):
     except Exception as e:
         print(f"❌ Lỗi lưu sent_links: {e}")
 
+def format_news_message(item):
+    """Định dạng tin nhắn với link ở dưới cùng"""
+    title = item['title']
+    description = item['description']
+    
+    # Loại bỏ trùng lặp: Nếu description bắt đầu bằng title thì bỏ title trong description
+    if description.startswith(title):
+        description = description[len(title):].strip()
+    
+    # Giới hạn độ dài description
+    if len(description) > 200:
+        description = description[:200] + "..."
+    
+    # Format tin nhắn: tiêu đề + mô tả + link ở dưới cùng
+    message = f"{title}\n\n{description}\n\n➡️ Đọc tiếp: {item['link']}"
+    
+    return message
+
 def main():
     print("=" * 60)
-    print("🤖 Bắt đầu Coin68 Telegram Bot - ULTRA SIMPLE VERSION")
+    print("🤖 Bắt đầu Coin68 Telegram Bot - LINK AT BOTTOM VERSION")
     print("=" * 60)
     
     debug_env()
@@ -168,15 +193,14 @@ def main():
     items_to_send = new_items[:MAX_NEWS_PER_RUN]
     print(f"📤 Sẽ gửi {len(items_to_send)} tin")
     
-    # Gửi tin - CHỈ GỬI LINK (Telegram tự động tạo preview với ảnh)
+    # Gửi tin
     success_count = 0
     for i, item in enumerate(items_to_send):
         try:
             print(f"\n📨 Đang gửi tin {i+1}/{len(items_to_send)}...")
             
-            # CHỈ GỬI LINK - Telegram tự động tạo preview với ảnh
-            # Người dùng bấm vào ảnh sẽ vào link
-            message = item['link']
+            # Format tin nhắn với link ở dưới cùng
+            message = format_news_message(item)
             
             # Gửi tin nhắn
             if send_telegram_message(message):
