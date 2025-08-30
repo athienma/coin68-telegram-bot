@@ -4,7 +4,7 @@ import re
 import json
 import os
 import sys
-import time  # ĐÃ THÊM IMPORT NÀY
+import time
 from datetime import datetime
 
 # Environment variables
@@ -172,7 +172,7 @@ def load_sent_links():
     """Load sent links from GitHub Gist"""
     if not GIST_TOKEN or not GIST_ID:
         print("GIST_TOKEN or GIST_ID not configured")
-        return set()  # ĐỔI THÀNH SET
+        return set()
     
     try:
         print(f"Connecting to Gist: {GIST_ID}")
@@ -195,7 +195,7 @@ def load_sent_links():
                 content = gist_data['files']['sent_links.json']['content']
                 sent_links = json.loads(content)
                 print(f"Loaded {len(sent_links)} links from Gist")
-                return set(sent_links)  # ĐỔI THÀNH SET
+                return set(sent_links)
             else:
                 print("sent_links.json not found in Gist")
                 return set()
@@ -215,7 +215,7 @@ def save_sent_links(links):
     
     try:
         # Keep only latest 200 links
-        links_list = list(links)  # CHUYỂN SET THÀNH LIST
+        links_list = list(links)
         if len(links_list) > 200:
             links_list = links_list[-200:]
         
@@ -256,7 +256,7 @@ def save_sent_links(links):
         return False
 
 def format_caption(item):
-    """Format caption with link at bottom"""
+    """Format caption with link at TOP"""
     title = item['title']
     description = item['description']
     
@@ -268,14 +268,14 @@ def format_caption(item):
     if len(description) > 800:
         description = description[:800] + "..."
     
-    # Format caption: title + description + link at bottom
-    caption = f"<b>{title}</b>\n\n{description}\n\n➡️ Đọc tiếp: {item['link']}"
+    # 🔥 FORMAT MỚI: Link ở TRÊN CÙNG, sau đó đến tiêu đề và mô tả
+    caption = f"➡️ Đọc tiếp: {item['link']}\n\n<b>{title}</b>\n\n{description}"
     
     return caption
 
 def main():
     print("=" * 60)
-    print("🤖 Starting Coin68 Telegram Bot")
+    print("🤖 Starting Coin68 Telegram Bot (LINK AT TOP)")
     print("=" * 60)
     
     debug_env()
@@ -284,7 +284,7 @@ def main():
         print("ERROR: Missing BOT_TOKEN or CHAT_ID")
         sys.exit(1)
     
-    # Load sent links
+    # Load sent links - ĐƯA PHẦN NÀY LÊN TRÊN NHƯ YÊU CẦU
     sent_links = load_sent_links()
     print(f"Previously sent links: {len(sent_links)}")
     
@@ -316,23 +316,22 @@ def main():
         try:
             print(f"\nSending item {i+1}/{len(items_to_send)}...")
             print(f"Title: {item['title']}")
-            print(f"Time: {item['pub_date_obj']}")
             
-            # Format caption with link at bottom
+            # Format caption with link at TOP
             caption = format_caption(item)
             
             # Send photo with caption if image available
             if item['image_url']:
                 print(f"Trying to send with image: {item['image_url']}")
                 if send_telegram_photo(item['image_url'], caption):
-                    sent_links.add(item['link'])  # SỬ DỤNG ADD THAY VÌ APPEND
+                    sent_links.add(item['link'])
                     success_count += 1
                     print(f"✅ Item {i+1} sent successfully with photo")
                 else:
                     # Fallback: send as text if photo fails
                     print("🔄 Photo send failed, trying text...")
                     if send_telegram_message(caption):
-                        sent_links.add(item['link'])  # SỬ DỤNG ADD THAY VÌ APPEND
+                        sent_links.add(item['link'])
                         success_count += 1
                         print(f"✅ Item {i+1} sent successfully as text")
                     else:
@@ -341,7 +340,7 @@ def main():
                 # Send as text if no image
                 print("No image available, sending as text")
                 if send_telegram_message(caption):
-                    sent_links.add(item['link'])  # SỬ DỤNG ADD THAY VÌ APPEND
+                    sent_links.add(item['link'])
                     success_count += 1
                     print(f"✅ Item {i+1} sent successfully as text")
                 else:
